@@ -20,7 +20,7 @@ static const char* COMMAND;
 static int submitted = 0;
 
 static
-void 
+void
 schedule_command(void){
     if(submitted) return;
     submitted = 1;
@@ -33,23 +33,31 @@ schedule_command(void){
     });
 }
 
+static void timer_retry_watchfile(const char*);
+
+enum WATCHFILEFLAGS {
+    WATCHFILE_NONE = 0,
+    WATCHFILE_QUIET_FAIL = 1,
+};
+
 static
 int
-watchfile(const char* filename){
+watchfile(const char* filename, enum WATCHFILEFLAGS flags){
     int fd = open(filename, O_EVTONLY); // open for notification only
     if(fd < 0){
-        fprintf(stderr, "Failed to watch '%s'\n", filename);
+        if(!(flags & WATCHFILE_QUIET_FAIL))
+            fprintf(stderr, "Failed to watch '%s'\n", filename);
         return 1;
     }
     fprintf(stderr, "Watching '%s'\n", filename);
     dispatch_source_t source = dispatch_source_create(
-            DISPATCH_SOURCE_TYPE_VNODE, 
-            fd,  
-            0 
-            | DISPATCH_VNODE_WRITE 
-            | DISPATCH_VNODE_DELETE 
-            | DISPATCH_VNODE_RENAME 
-            | DISPATCH_VNODE_EXTEND 
+            DISPATCH_SOURCE_TYPE_VNODE,
+            fd,
+            0
+            | DISPATCH_VNODE_WRITE
+            | DISPATCH_VNODE_DELETE
+            | DISPATCH_VNODE_RENAME
+            | DISPATCH_VNODE_EXTEND
             | DISPATCH_VNODE_ATTRIB, // So touch works as expected.
             dispatch_get_main_queue());
 
@@ -57,12 +65,16 @@ watchfile(const char* filename){
         uintptr_t mask = dispatch_source_get_data(source);
         if(mask & DISPATCH_VNODE_RENAME){
             fprintf(stderr, "'%s' was renamed.\n", filename);
-            // FIXME: this isn't quite right.
-            // We assume that we will get a delete right after and then we can
-            // rewatch the new file, but that could never happen.
-            //
-            // We should probably just treat this like a delete and cancel the source
-            // and then kick off a timer that looks to see if the file is created.
+            dispatch_source_cancel(source);
+            int closed = close(fd);
+            if(closed < 0)
+                fprintf(stderr, "Close for %s failed.\n", filename);
+            // fprintf(stderr, "Canceling '%s'\n", filename);
+            int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
+            if(fail)
+                timer_retry_watchfile(filename);
+            else // file exists again
+                schedule_command();
             return;
         }
         if(mask & DISPATCH_VNODE_WRITE) {
@@ -76,20 +88,16 @@ watchfile(const char* filename){
         }
         if(mask & (DISPATCH_VNODE_DELETE)){
             fprintf(stderr, "'%s' was deleted.\n", filename);
-            schedule_command();
             dispatch_source_cancel(source);
-            int closed  =close(fd);
+            int closed = close(fd);
             if(closed < 0)
                 fprintf(stderr, "Close for %s failed.\n", filename);
-            fprintf(stderr, "Canceling '%s'\n", filename);
-            // This isn't correct as the file may get deleted then recreated,
-            // but with a long enough timeframe that we never start watching it
-            // again.
-            int fail = watchfile(filename);
-            // This obviously isn't quite correct.
-            // If we fail we should basically create a timed event to poll for
-            // if the file is later created or something simmilar.
-            (void)fail;
+            // fprintf(stderr, "Canceling '%s'\n", filename);
+            int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
+            if(fail)
+                timer_retry_watchfile(filename);
+            else // file exists again
+                schedule_command();
             return;
         }
         schedule_command();
@@ -98,7 +106,25 @@ watchfile(const char* filename){
     return 0;
 }
 
-int 
+static
+void
+timer_retry_watchfile(const char* filename){
+    dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    // 1 time per second
+    uint64_t interval_in_nanoseconds = 1000llu*1000llu*1000llu;
+    // 1/10th of a second
+    uint64_t leeway_in_nanoseconds = 1000llu*1000llu*1000llu/10llu;
+    dispatch_source_set_timer(source, DISPATCH_TIME_NOW, interval_in_nanoseconds, leeway_in_nanoseconds);
+    dispatch_source_set_event_handler(source, ^{
+        int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
+        if(fail) return;
+        schedule_command();
+        dispatch_source_cancel(source);
+        });
+    dispatch_resume(source);
+}
+
+int
 main(int argc, char** argv){
     if(argc < 3){
         const char* progname = argc? argv[0] : "macwatch";
@@ -110,10 +136,10 @@ main(int argc, char** argv){
     COMMAND = argv[1];
     for(int i = 0; i < nfiles; i++){
         char* filename = filenames[i];
-        int fail = watchfile(filename);
-        // Same comment on correctness. If we fail to watch we should make a
-        // timer event to poll for if the file is later created.
-        (void)fail;
+        int fail = watchfile(filename, WATCHFILE_NONE);
+        if(fail){
+            timer_retry_watchfile(filename);
+        }
     }
     // I'm not sure why, but if you use dispatch_main to drive the event loop
     // then you stop being able to kill the program with ctrl-c or even ctrl-\
