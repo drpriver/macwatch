@@ -24,8 +24,7 @@ void
 schedule_command(void){
     if(submitted) return;
     submitted = 1;
-    dispatch_group_t group = dispatch_group_create();
-    dispatch_group_async(group, dispatch_get_main_queue(), ^{
+    dispatch_async(dispatch_get_main_queue(), ^{
         fprintf(stderr, "---\n%s\n", COMMAND);
         system(COMMAND);
         fprintf(stderr, "---\n");
@@ -141,10 +140,6 @@ main(int argc, char** argv){
             timer_retry_watchfile(filename);
         }
     }
-    // I'm not sure why, but if you use dispatch_main to drive the event loop
-    // then you stop being able to kill the program with ctrl-c or even ctrl-\
-    // Possibly you need to subscribe to signal events and call exit?  But for
-    // now, just use CFRunLoopRun because who cares.
 #if 0
     dispatch_main();
 #else
