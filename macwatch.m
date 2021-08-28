@@ -44,8 +44,9 @@ int
 watchfile(const char* filename, enum WATCHFILEFLAGS flags){
     int fd = open(filename, O_EVTONLY); // open for notification only
     if(fd < 0){
-        if(!(flags & WATCHFILE_QUIET_FAIL))
-            fprintf(stderr, "Failed to watch '%s'\n", filename);
+        if(!(flags & WATCHFILE_QUIET_FAIL)){
+            fprintf(stderr, "Failed to watch '%s': %s\n", filename, strerror(errno));
+        }
         return 1;
     }
     fprintf(stderr, "Watching '%s'\n", filename);
@@ -66,8 +67,9 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             fprintf(stderr, "'%s' was renamed.\n", filename);
             dispatch_source_cancel(source);
             int closed = close(fd);
-            if(closed < 0)
-                fprintf(stderr, "Close for %s failed.\n", filename);
+            if(closed < 0){
+                fprintf(stderr, "Close for %s failed: %s\n", filename, strerror(errno));
+                }
             // fprintf(stderr, "Canceling '%s'\n", filename);
             int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
             if(fail)
@@ -90,7 +92,7 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             dispatch_source_cancel(source);
             int closed = close(fd);
             if(closed < 0)
-                fprintf(stderr, "Close for %s failed.\n", filename);
+                fprintf(stderr, "Close for %s failed: %s\n", filename, strerror(errno));
             // fprintf(stderr, "Canceling '%s'\n", filename);
             int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
             if(fail)
@@ -110,9 +112,9 @@ void
 timer_retry_watchfile(const char* filename){
     dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     // 1 time per second
-    uint64_t interval_in_nanoseconds = 1000llu*1000llu*1000llu;
+    uint64_t interval_in_nanoseconds = 1llu*NSEC_PER_SEC;
     // 1/10th of a second
-    uint64_t leeway_in_nanoseconds = 1000llu*1000llu*1000llu/10llu;
+    uint64_t leeway_in_nanoseconds = 1llu*NSEC_PER_SEC/10llu;
     dispatch_source_set_timer(source, DISPATCH_TIME_NOW, interval_in_nanoseconds, leeway_in_nanoseconds);
     dispatch_source_set_event_handler(source, ^{
         int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
