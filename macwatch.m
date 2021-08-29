@@ -142,6 +142,7 @@ main(int argc, char** argv){
             timer_retry_watchfile(filename);
         }
     }
+    schedule_command();
 #if 0
     dispatch_main();
 #else
