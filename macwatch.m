@@ -54,11 +54,11 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             DISPATCH_SOURCE_TYPE_VNODE,
             fd,
             0
+            // | DISPATCH_VNODE_ATTRIB, // So touch works as expected.
             | DISPATCH_VNODE_WRITE
             | DISPATCH_VNODE_DELETE
             | DISPATCH_VNODE_RENAME
-            | DISPATCH_VNODE_EXTEND
-            | DISPATCH_VNODE_ATTRIB, // So touch works as expected.
+            | DISPATCH_VNODE_EXTEND,
             dispatch_get_main_queue());
 
     dispatch_source_set_event_handler(source, ^{
