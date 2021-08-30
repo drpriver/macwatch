@@ -8,6 +8,8 @@
 #import <fcntl.h>
 // fprintf, stderr
 #import <stdio.h>
+// strlen, strdup
+#import <string.h>
 
 #if !__has_feature(objc_arc)
 #error "ARC is off"
@@ -127,9 +129,9 @@ timer_retry_watchfile(const char* filename){
 
 int
 main(int argc, char** argv){
-    if(argc < 3){
-        const char* progname = argc? argv[0] : "macwatch";
-        fprintf(stderr, "Usage: %s 'command' files ...\n", progname);
+    const char* progname = argc? argv[0] : "macwatch";
+    if(argc < 2){
+        fprintf(stderr, "Usage: %s 'command' files [...]\n", progname);
         return 1;
     }
     int nfiles = argc-2;
@@ -141,6 +143,25 @@ main(int argc, char** argv){
         if(fail){
             timer_retry_watchfile(filename);
         }
+    }
+    // Support piping in filenames.
+    if(!isatty(STDIN_FILENO)){ // we're being piped to.
+        char buff[8192];
+        while(fgets(buff, sizeof(buff), stdin)){
+            size_t len = strlen(buff);
+            if(len){
+                buff[--len] = '\0';
+                char* fn = strdup(buff);
+                int fail = watchfile(fn, WATCHFILE_NONE);
+                if(fail){
+                    timer_retry_watchfile(fn);
+                }
+            }
+        }
+    }
+    else if(argc < 3){
+        fprintf(stderr, "Usage: %s 'command' files [...]\n", progname);
+        return 1;
     }
     schedule_command();
 #if 0
