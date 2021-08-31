@@ -10,6 +10,8 @@
 #import <stdio.h>
 // strlen, strdup
 #import <string.h>
+// setrlimit if fd limit is too low.
+#import <sys/resource.h>
 
 #if !__has_feature(objc_arc)
 #error "ARC is off"
@@ -127,8 +129,32 @@ timer_retry_watchfile(const char* filename){
     dispatch_resume(source);
 }
 
+static
+int
+set_max_files_to_reasonable_number(void){
+    int err;
+    struct rlimit rl;
+    err = getrlimit(RLIMIT_NOFILE, &rl);
+    if(err){
+        perror("getrlimit");
+        return 1;
+    }
+    if(rl.rlim_cur < 4192 && rl.rlim_max >= 4192){
+        rl.rlim_cur = 4192;
+        err = setrlimit(RLIMIT_NOFILE, &rl);
+        if(err){
+            perror("setrlimit");
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 int
 main(int argc, char** argv){
+    if(set_max_files_to_reasonable_number() != 0)
+        return 1;
     const char* progname = argc? argv[0] : "macwatch";
     if(argc < 2){
         fprintf(stderr, "Usage: %s 'command' files [...]\n", progname);
