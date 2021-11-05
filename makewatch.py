@@ -6,6 +6,7 @@ of a target and only attempt to rebuild it when they change.
 import sys
 import subprocess
 import argparse
+from typing import List, Dict
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -14,7 +15,7 @@ def main() -> None:
     args = parser.parse_args()
     run(**vars(args))
 
-def line_to_dependencies(line):
+def line_to_dependencies(line:str) -> List[str]:
     deps = []
     line = line[line.index(':')+1:]
     idx = line.find('|')
@@ -26,7 +27,7 @@ def line_to_dependencies(line):
         deps.append(dep)
     return deps
 
-def expand(targets, target):
+def expand(targets:Dict[str, List[str]], target:str) -> List[str]:
     deps = targets[target]
     if not deps:
         return [target]
@@ -41,6 +42,7 @@ def run(target:str, always_make:bool=False) -> None:
     proc = subprocess.Popen(['make', '-p', '--dry-run'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     rule = target + ':'
     targets = {}
+    assert proc.stdout
     for line_ in proc.stdout:
         line = line_.decode('utf-8').strip()
         if not line:
@@ -54,6 +56,7 @@ def run(target:str, always_make:bool=False) -> None:
     true_deps = sorted(set(expand(targets, target)))
     mac = subprocess.Popen(['macwatch', f'make {"--always-make " if always_make else ""}{target}'], stdin=subprocess.PIPE)
     try:
+        assert mac.stdin
         for dep in true_deps:
             mac.stdin.write(dep.encode('utf-8')+b'\n')
         mac.stdin.flush()
