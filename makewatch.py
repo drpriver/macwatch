@@ -10,6 +10,7 @@ import argparse
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('target')
+    parser.add_argument('--always-make', '-B', action='store_true')
     args = parser.parse_args()
     run(**vars(args))
 
@@ -36,7 +37,7 @@ def expand(targets, target):
         result.append(dep)
     return result
 
-def run(target:str) -> None:
+def run(target:str, always_make:bool=False) -> None:
     proc = subprocess.Popen(['make', '-p', '--dry-run'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     rule = target + ':'
     targets = {}
@@ -51,7 +52,7 @@ def run(target:str) -> None:
 
     proc.wait()
     true_deps = sorted(set(expand(targets, target)))
-    mac = subprocess.Popen(['macwatch', f'make {target}'], stdin=subprocess.PIPE)
+    mac = subprocess.Popen(['macwatch', f'make {"--always-make " if always_make else ""}{target}'], stdin=subprocess.PIPE)
     try:
         for dep in true_deps:
             mac.stdin.write(dep.encode('utf-8')+b'\n')
