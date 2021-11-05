@@ -36,10 +36,11 @@ schedule_command(void){
     });
 }
 
-static void timer_retry_watchfile(const char*);
+static void periodically_retry_watchfile(const char*);
 
 enum WATCHFILEFLAGS {
     WATCHFILE_NONE = 0,
+    // Don't print errors when failing to watch.
     WATCHFILE_QUIET_FAIL = 1,
 };
 
@@ -77,7 +78,7 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             // fprintf(stderr, "Canceling '%s'\n", filename);
             int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
             if(fail)
-                timer_retry_watchfile(filename);
+                periodically_retry_watchfile(filename);
             else // file exists again
                 schedule_command();
             return;
@@ -100,7 +101,7 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             // fprintf(stderr, "Canceling '%s'\n", filename);
             int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
             if(fail)
-                timer_retry_watchfile(filename);
+                periodically_retry_watchfile(filename);
             else // file exists again
                 schedule_command();
             return;
@@ -113,7 +114,7 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
 
 static
 void
-timer_retry_watchfile(const char* filename){
+periodically_retry_watchfile(const char* filename){
     dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     // 1 time per second
     uint64_t interval_in_nanoseconds = 1llu*NSEC_PER_SEC;
@@ -166,23 +167,21 @@ main(int argc, char** argv){
     for(int i = 0; i < nfiles; i++){
         char* filename = filenames[i];
         int fail = watchfile(filename, WATCHFILE_NONE);
-        if(fail){
-            timer_retry_watchfile(filename);
-        }
+        if(fail)
+            periodically_retry_watchfile(filename);
     }
     // Support piping in filenames.
     if(!isatty(STDIN_FILENO)){ // we're being piped to.
         char buff[8192];
         while(fgets(buff, sizeof(buff), stdin)){
             size_t len = strlen(buff);
-            if(len){
-                buff[--len] = '\0';
-                char* fn = strdup(buff);
-                int fail = watchfile(fn, WATCHFILE_NONE);
-                if(fail){
-                    timer_retry_watchfile(fn);
-                }
-            }
+            if(!len) continue;
+            buff[--len] = '\0';
+            if(!len) continue;
+            char* fn = strdup(buff);
+            int fail = watchfile(fn, WATCHFILE_NONE);
+            if(fail)
+                periodically_retry_watchfile(fn);
         }
     }
     else if(argc < 3){
