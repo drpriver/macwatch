@@ -17,6 +17,7 @@ def main() -> None:
     run(**vars(args))
 
 def run(target:str, always_make:bool, depsuff:Tuple[str]) -> None:
+    depsuff = tuple(depsuff)
     proc = subprocess.Popen(['make', '-p', '--dry-run'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     rule = target + ':'
     targets = {}
