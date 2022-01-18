@@ -151,7 +151,7 @@ set_max_files_to_reasonable_number(void){
     return 0;
 }
 
-
+#ifndef NOMAIN
 int
 main(int argc, char** argv){
     if(set_max_files_to_reasonable_number() != 0)
@@ -196,3 +196,4 @@ main(int argc, char** argv){
 #endif
     return 0;
 }
+#endif
