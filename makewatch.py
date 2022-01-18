@@ -18,7 +18,7 @@ def main() -> None:
 
 def run(target:str, always_make:bool, depsuff:Tuple[str]) -> None:
     depsuff = tuple(depsuff)
-    proc = subprocess.Popen(['make', '-p', '--dry-run'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(['make', '-p', '--dry-run', target], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     rule = target + ':'
     targets = {}
     assert proc.stdout
