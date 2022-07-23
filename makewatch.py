@@ -13,11 +13,14 @@ def main() -> None:
     parser.add_argument('target')
     parser.add_argument('--always-make', '-B', action='store_true')
     parser.add_argument('--depsuff', nargs='*', default=['.dep', '.d'], help='suffix for dependency files to be ignore')
+    parser.add_argument('--dont-make', '-M', help="Don't build the target first")
     args = parser.parse_args()
     run(**vars(args))
 
-def run(target:str, always_make:bool, depsuff:Tuple[str]) -> None:
+def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False) -> None:
     depsuff = tuple(depsuff)
+    if not dont_make:
+        subprocess.check_call(['make', target])
     proc = subprocess.Popen(['make', '-p', '--dry-run', target], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     rule = target + ':'
     targets = {}
