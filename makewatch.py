@@ -6,7 +6,7 @@ of a target and only attempt to rebuild it when they change.
 import sys
 import subprocess
 import argparse
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -14,16 +14,19 @@ def main() -> None:
     parser.add_argument('--always-make', '-B', action='store_true')
     parser.add_argument('--depsuff', nargs='*', default=['.dep', '.d'], help='suffix for dependency files to be ignore')
     parser.add_argument('--dont-make', '-M', help="Don't build the target first")
+    parser.add_argument('--exclude', nargs='*')
+    parser.add_argument('--flags', nargs='*')
     args = parser.parse_args()
     run(**vars(args))
 
-def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False) -> None:
+def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags:List[str]=None, exclude:List[str]=None) -> None:
     depsuff = tuple(depsuff)
     if not dont_make:
         subprocess.check_call(['make', target])
     proc = subprocess.Popen(['make', '-p', '--dry-run', target], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     rule = target + ':'
     targets = {}
+    excludes = set(exclude) if exclude else set()
     assert proc.stdout
     for line_ in proc.stdout:
         line = line_.decode('utf-8').strip()
@@ -37,7 +40,9 @@ def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False) -> No
     proc.wait()
     true_deps = sorted(set(expand(targets, target)))
     # macwatch can take dependencies via stdin if invoked non-interactively.
-    mac = subprocess.Popen(['macwatch', f'make {"--always-make " if always_make else ""}{target}'], stdin=subprocess.PIPE)
+    fl = (' -' + ' -'.join(flags)) if flags else ''
+    cmd = ['macwatch', f'make {"--always-make " if always_make else ""}{target}{fl}']
+    mac = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     try:
         assert mac.stdin
         for dep in true_deps:

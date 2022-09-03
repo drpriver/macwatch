@@ -18,6 +18,7 @@
 #endif
 
 static const char* COMMAND;
+static int VERBOSE = 0;
 
 // Multiple files can change at once, so use this to prevent submitting
 // the command again if we've already put it in the queue.
@@ -54,7 +55,7 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
         }
         return 1;
     }
-    fprintf(stderr, "Watching '%s'\n", filename);
+    if(VERBOSE) fprintf(stderr, "Watching '%s'\n", filename);
     dispatch_source_t source = dispatch_source_create(
             DISPATCH_SOURCE_TYPE_VNODE,
             fd,
@@ -69,12 +70,12 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
     dispatch_source_set_event_handler(source, ^{
         uintptr_t mask = dispatch_source_get_data(source);
         if(mask & DISPATCH_VNODE_RENAME){
-            fprintf(stderr, "'%s' was renamed.\n", filename);
+            if(VERBOSE) fprintf(stderr, "'%s' was renamed.\n", filename);
             dispatch_source_cancel(source);
             int closed = close(fd);
             if(closed < 0){
                 fprintf(stderr, "Close for %s failed: %s\n", filename, strerror(errno));
-                }
+            }
             // fprintf(stderr, "Canceling '%s'\n", filename);
             int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
             if(fail)
@@ -84,16 +85,16 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             return;
         }
         if(mask & DISPATCH_VNODE_WRITE) {
-            fprintf(stderr, "'%s' was written.\n", filename);
+            if(VERBOSE) fprintf(stderr, "'%s' was written.\n", filename);
         }
         if(mask & DISPATCH_VNODE_EXTEND) {
-            fprintf(stderr, "'%s' was extended.\n", filename);
+            if(VERBOSE) fprintf(stderr, "'%s' was extended.\n", filename);
         }
         if(mask & DISPATCH_VNODE_ATTRIB) {
-            fprintf(stderr, "'%s' metadata changed.\n", filename);
+            if(VERBOSE) fprintf(stderr, "'%s' metadata changed.\n", filename);
         }
         if(mask & (DISPATCH_VNODE_DELETE)){
-            fprintf(stderr, "'%s' was deleted.\n", filename);
+            if(VERBOSE) fprintf(stderr, "'%s' was deleted.\n", filename);
             dispatch_source_cancel(source);
             int closed = close(fd);
             if(closed < 0)
@@ -161,6 +162,7 @@ main(int argc, char** argv){
         fprintf(stderr, "Usage: %s 'command' files [...]\n", progname);
         return 1;
     }
+    VERBOSE = getenv("MACWATCH_VERBOSE")?atoi(getenv("MACWATCH_VERBOSE")):1;
     int nfiles = argc-2;
     char** filenames = argv + 2;
     COMMAND = argv[1];
