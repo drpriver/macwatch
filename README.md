@@ -6,3 +6,13 @@ and a command to run when those files change and it will invoke the command.
 makewatch.py is a companion script that will parse a Makefile for the
 dependencies of a target and invoke make when that target's dependencies
 change.
+
+## Usage
+```sh
+$ macwatch 'command' [files ...]
+```
+
+or
+```sh
+$ something_outputting_lines_to_stdout | macwatch 'command'
+```
