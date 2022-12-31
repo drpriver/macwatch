@@ -6,6 +6,7 @@ of a target and only attempt to rebuild it when they change.
 import sys
 import subprocess
 import argparse
+import os
 from typing import List, Dict, Tuple, Set
 
 def main() -> None:
@@ -46,7 +47,7 @@ def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags
             targets[line[:line.index(':')]] = line_to_dependencies(line, depsuff)
 
     proc.wait()
-    true_deps = sorted(set(expand(targets, target)))
+    true_deps = sorted(set(os.path.normpath(p) for p in expand(targets, target)))
     # macwatch can take dependencies via stdin if invoked non-interactively.
     fl = (' -' + ' -'.join(flags)) if flags else ''
     cmd = ['macwatch', f'make {"--always-make " if always_make else ""}{target}{fl}']
