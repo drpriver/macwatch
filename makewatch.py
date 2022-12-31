@@ -13,7 +13,7 @@ def main() -> None:
     parser.add_argument('target')
     parser.add_argument('--always-make', '-B', action='store_true')
     parser.add_argument('--depsuff', nargs='*', default=['.dep', '.d'], help='suffix for dependency files to be ignore')
-    parser.add_argument('--dont-make', '-M', help="Don't build the target first")
+    parser.add_argument('--dont-make', '-M', help="Don't build the target first", action='store_true')
     parser.add_argument('--exclude', nargs='*')
     parser.add_argument('--flags', nargs='*')
     args = parser.parse_args()
@@ -27,12 +27,20 @@ def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags
     rule = target + ':'
     targets = {}
     excludes = set(exclude) if exclude else set()
+    intermediates = set()
+    phonies = set()
     assert proc.stdout
     for line_ in proc.stdout:
         line = line_.decode('utf-8').strip()
         if not line:
             continue
         if line.startswith('#'):
+            continue
+        if line.startswith('.INTERMEDIATE:'):
+            intermediates.update(line.split()[1:])
+            continue
+        if line.startswith('.PHONY:'):
+            phonies.update(line.split()[1:])
             continue
         if ':' in line:
             targets[line[:line.index(':')]] = line_to_dependencies(line, depsuff)
@@ -46,6 +54,9 @@ def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags
     try:
         assert mac.stdin
         for dep in true_deps:
+            if dep in excludes: continue
+            if dep in intermediates: continue
+            if dep in phonies: continue
             mac.stdin.write(dep.encode('utf-8')+b'\n')
         mac.stdin.flush()
         mac.stdin.close()
