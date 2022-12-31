@@ -3,11 +3,11 @@
 A hacky makefile dependency parser to watch the dependencies
 of a target and only attempt to rebuild it when they change.
 """
-import sys
-import subprocess
 import argparse
 import os
-from typing import List, Dict, Tuple, Set
+import subprocess
+import sys
+from typing import List, Dict, Tuple
 
 def main() -> None:
     parser = argparse.ArgumentParser()
