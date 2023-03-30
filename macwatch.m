@@ -66,16 +66,16 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             | DISPATCH_VNODE_RENAME
             | DISPATCH_VNODE_EXTEND,
             dispatch_get_main_queue());
+    dispatch_source_set_cancel_handler(source, ^{
+        int closed = close(fd);
+        (void)closed;
+    });
 
     dispatch_source_set_event_handler(source, ^{
         uintptr_t mask = dispatch_source_get_data(source);
         if(mask & DISPATCH_VNODE_RENAME){
             if(VERBOSE) fprintf(stderr, "'%s' was renamed.\n", filename);
             dispatch_source_cancel(source);
-            int closed = close(fd);
-            if(closed < 0){
-                fprintf(stderr, "Close for %s failed: %s\n", filename, strerror(errno));
-            }
             // fprintf(stderr, "Canceling '%s'\n", filename);
             int fail = watchfile(filename, WATCHFILE_QUIET_FAIL);
             if(fail)
@@ -108,7 +108,7 @@ watchfile(const char* filename, enum WATCHFILEFLAGS flags){
             return;
         }
         schedule_command();
-        });
+    });
     dispatch_resume(source);
     return 0;
 }
@@ -127,7 +127,7 @@ periodically_retry_watchfile(const char* filename){
         if(fail) return;
         schedule_command();
         dispatch_source_cancel(source);
-        });
+    });
     dispatch_resume(source);
 }
 
@@ -178,7 +178,7 @@ main(int argc, char** argv){
         while(fgets(buff, sizeof(buff), stdin)){
             size_t len = strlen(buff);
             if(!len) continue;
-            buff[--len] = '\0';
+            buff[--len] = '\0'; // remove trailing '\n'
             if(!len) continue;
             char* fn = strdup(buff);
             int fail = watchfile(fn, WATCHFILE_NONE);
@@ -191,7 +191,12 @@ main(int argc, char** argv){
         return 1;
     }
     schedule_command();
+    // main dispatch queue gets pumped by one of:
+    // - dispatch_main()
+    // - CFRunLoopRun()
+    // - NSApplicationMain()
 #if 0
+    // This works, but breaks ctrl-c for some reason.
     dispatch_main();
 #else
     CFRunLoopRun();
