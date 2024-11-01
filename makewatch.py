@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 A hacky makefile dependency parser to watch the dependencies
 of a target and only attempt to rebuild it when they change.
@@ -7,7 +8,6 @@ import argparse
 import os
 import subprocess
 import sys
-from typing import List, Dict, Tuple
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -20,7 +20,7 @@ def main() -> None:
     args = parser.parse_args()
     run(**vars(args))
 
-def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags:List[str]=None, exclude:List[str]=None) -> None:
+def run(target:str, always_make:bool, depsuff:tuple[str, ...], dont_make=False, flags:list[str]=None, exclude:list[str]=None) -> None:
     depsuff = tuple(depsuff)
     if not dont_make:
         subprocess.check_call(['make', target])
@@ -35,6 +35,14 @@ def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags
         line = line_.decode('utf-8').strip()
         if not line:
             continue
+        if '=' in line:
+            continue
+        if '%' in line:
+            continue
+        if ':' not in line:
+            continue
+        if 'is up to date' in line:
+            continue
         if line.startswith('#'):
             continue
         if line.startswith('.INTERMEDIATE:'):
@@ -43,11 +51,18 @@ def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags
         if line.startswith('.PHONY:'):
             phonies.update(line.split()[1:])
             continue
-        if ':' in line:
-            targets[line[:line.index(':')]] = line_to_dependencies(line, depsuff)
+        if line.startswith('.'):
+            continue
+        before, after = line.split(':', 1)
+        key = os.path.normpath(before)
+        deps = line_to_dependencies(after, depsuff)
+        if key in targets:
+            targets[key].extend(deps)
+        else:
+            targets[key] = deps
 
     proc.wait()
-    true_deps = sorted(set(os.path.normpath(p) for p in expand(targets, target)))
+    true_deps = sorted(set(p for p in expand(targets, target)))
     # macwatch can take dependencies via stdin if invoked non-interactively.
     fl = (' -' + ' -'.join(flags)) if flags else ''
     cmd = ['macwatch', f'make {"--always-make " if always_make else ""}{target}{fl}']
@@ -65,13 +80,12 @@ def run(target:str, always_make:bool, depsuff:Tuple[str], dont_make=False, flags
     except KeyboardInterrupt:
         mac.kill()
 
-def line_to_dependencies(line:str, depsuff:Tuple[str]) -> List[str]:
+def line_to_dependencies(line:str, depsuff:tuple[str, ...]) -> list[str]:
     '''
     Extracts the dependency list from a target line.
     BUG: files with spaces are incorrectly handled.
     '''
     deps = []
-    line = line[line.index(':')+1:]
     # ignore order-only dependencies
     idx = line.find('|')
     if idx > -1:
@@ -79,10 +93,10 @@ def line_to_dependencies(line:str, depsuff:Tuple[str]) -> List[str]:
     for dep in line.strip().split():
         if dep.endswith(depsuff):
             continue
-        deps.append(dep)
+        deps.append(os.path.normpath(dep))
     return deps
 
-def expand(targets:Dict[str, List[str]], target:str) -> List[str]:
+def expand(targets:dict[str, list[str]], target:str) -> list[str]:
     '''
     Flattens a dependency graph for a given target to a list.
     As a special case, returns the target itself as a dependency
